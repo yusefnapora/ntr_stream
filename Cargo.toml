@@ -1,0 +1,12 @@
+[package]
+name = "ntr_stream"
+version = "0.1.0"
+authors = ["Yusef Napora <yusef@napora.org>"]
+
+[dependencies]
+protocol = "0.3.4"
+protocol-derive = "0.3.4"
+clap = "2.31.1"
+bus = "1.4.1"
+hyper = "0.11.22"
+futures = "0.1.19"
