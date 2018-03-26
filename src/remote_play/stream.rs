@@ -12,8 +12,8 @@ struct ScreenPacketReaders {
 }
 
 pub struct ImageReaders {
-    top: BusReader<Vec<u8>>,
-    bottom: BusReader<Vec<u8>>
+    pub top: BusReader<Vec<u8>>,
+    pub bottom: BusReader<Vec<u8>>
 }
 
 pub fn remote_play_stream() -> ImageReaders {

@@ -45,10 +45,11 @@ fn main() {
     println!("Host: {}, quality: {}", host, quality);
     println!("port: {}", listen_port);
 
-    let image_readers = stream::remote_play_stream();
 
     let addr = format!("127.0.0.1:{}", listen_port);
     let addr = addr.parse().unwrap();
-    let server = Http::new().bind(&addr, || Ok(StreamingServer)).unwrap();
+    let server = Http::new().bind(&addr, || Ok(
+        StreamingServer { image_readers: stream::remote_play_stream() }
+    )).unwrap();
     server.run().unwrap();
 }
