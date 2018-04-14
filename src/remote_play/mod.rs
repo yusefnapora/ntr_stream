@@ -1,2 +1,2 @@
-mod packets;
+pub mod packets;
 pub mod stream;

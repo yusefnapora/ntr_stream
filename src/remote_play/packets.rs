@@ -1,6 +1,7 @@
 use protocol::{Parcel, Error};
 use std::io::prelude::*;
-use std::u8;
+use std::{u8, u32};
+use byteorder::{ByteOrder, WriteBytesExt, LittleEndian, BigEndian};
 
 #[derive(Clone, PartialEq)]
 pub enum Screen {
@@ -51,46 +52,88 @@ impl RemotePlayPacket {
     }
 }
 
-#[derive(Protocol, Clone)]
-pub struct NtrControlPacket {
+#[derive(Clone)]
+pub struct RemotePlayControlPacket {
     magic: u32,
-    unknown: u32,
+    sequence: u32,
     packet_type: u32,
     command: u32,
     args: [u32; 16],
-    data_length: u32
 }
 
+impl Parcel for RemotePlayControlPacket {
+    fn read(reader: &mut Read) -> Result<Self, Error> {
+        panic!("read not supported for control packets")
+    }
+
+    fn write(&self, writer: &mut Write) -> Result<(), Error> {
+        let mut buf = vec![];
+        buf.write_u32::<LittleEndian>(self.magic);
+        buf.write_u32::<LittleEndian>(self.sequence);
+        buf.write_u32::<LittleEndian>(self.packet_type);
+        buf.write_u32::<LittleEndian>(self.command);
+        for i in &self.args {
+            buf.write_u32::<LittleEndian>(*i);
+        }
+        buf.write_u32::<LittleEndian>(0);
+        writer.write(&buf);
+        Ok(())
+    }
+}
 
 pub struct StreamingConfig {
-    priority_screen: Screen,
-    priority_factor: u32,
-    compression_quality: u32,
-    qos_kbps: f64
+    pub host: String,
+    pub priority_screen: Screen,
+    pub priority_factor: u32,
+    pub compression_quality: u32,
+    pub qos: u32
 }
 
 
-fn make_init_remote_play_packet(config: &StreamingConfig) -> NtrControlPacket {
+pub fn make_init_remote_play_packet(config: &StreamingConfig) -> RemotePlayControlPacket {
     const NTR_MAGIC: u32 = 0x12345678;
+
     let screen_bits: u32 = match config.priority_screen {
         Screen::Top => 1 << 8,
         Screen::Bottom => 0
     };
 
     let mode: u32 = screen_bits | config.priority_factor;
-    let qos_bytes: u32 = (config.qos_kbps * 1024. * 1024.) as u32;
 
     let mut args: [u32; 16] = [0; 16];
     args[0] = mode;
     args[1] = config.compression_quality;
-    args[2] = qos_bytes;
+    args[2] = config.qos;
 
-    NtrControlPacket {
+    RemotePlayControlPacket {
         magic: NTR_MAGIC,
-        unknown: 1,
+        sequence: 3000,
         packet_type: 0,
         command: 901,
         args,
-        data_length: 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fmt::Write;
+
+    #[test]
+    fn make_packet() {
+        let config = StreamingConfig {
+            host: "0.0.0.0".to_string(),
+            priority_screen: Screen::Top,
+            priority_factor: 1,
+            compression_quality:  75,
+            qos: 1966080
+        };
+        let packet = make_init_remote_play_packet(&config);
+        let bytes = packet.raw_bytes().unwrap();
+        let mut hex = String::new();
+        for &byte in bytes.iter() {
+            write!(&mut hex, "{:02X}", byte);
+        }
+        assert_eq!(hex, "78563412B80B00000000000085030000010100004B00000000001E000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
     }
 }

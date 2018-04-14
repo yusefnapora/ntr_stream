@@ -10,21 +10,23 @@ use hyper::Method;
 use hyper::StatusCode;
 
 use bus::BusReader;
-use remote_play::stream::ImageReaders;
+use remote_play::stream::RemotePlayStream;
 use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
 use hyper::Chunk;
-use futures::sync::mpsc::Receiver;
 
 pub struct StreamingServer {
-    pub image_readers: ImageReaders
+    pub remote_play_stream: RemotePlayStream
 }
 
 fn format_timestamp() -> String {
-    "foo".to_string()
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let in_ms = ts.as_secs() * 1000 + ts.subsec_nanos() as u64 / 1_000_000;
+    format!("{:6}", in_ms as f64)
 }
 
 
-fn stream_images(rx_frames: Receiver<Vec<u8>>) -> Box<Future<Item=hyper::Response, Error=hyper::Error>>{
+fn stream_images(mut rx_frames: BusReader<Vec<u8>>) -> Box<Future<Item=hyper::Response, Error=hyper::Error>>{
     let mut response = Response::new();
     let (tx_response, rx_response) = oneshot::channel();
     let (mut tx_body, rx_body) = mpsc::channel(1);
@@ -40,12 +42,19 @@ fn stream_images(rx_frames: Receiver<Vec<u8>>) -> Box<Future<Item=hyper::Respons
         ].join("\r\n");
 
         loop {
-            let frame = rx_frames.recv();
+            let frame_result = rx_frames.recv();
+            if frame_result.is_err() {
+                continue;
+            }
+            let frame = frame_result.unwrap();
             let timestamp_header = format!("\r\nX-Timestamp: {}\r\n\r\n", format_timestamp());
-            let mut chunk: Chunk = boundary.into_bytes().into();
+            let mut chunk: Chunk = boundary.clone().into_bytes().into();
             chunk.extend(timestamp_header.into_bytes());
             chunk.extend(frame);
-//            tx_body.send(Ok(chunk)).wait().expect("Error sending frame");
+            match tx_body.send(Ok(chunk)).wait() {
+                Ok(t) => { tx_body = t; },
+                Err(_) => { break; }
+            }
         }
     });
 
@@ -67,9 +76,11 @@ impl Service for StreamingServer {
                 response.set_body("hi there");
             },
 
-//            (&Method::Get, "/top") => {
-//                return stream_images(top_reader.clone(), response);
-//            }
+            (&Method::Get, "/top") => {
+                let bus = self.remote_play_stream.top_image_bus.clone();
+                let mut rx = bus.lock().unwrap().add_rx();
+                return stream_images(rx);
+            }
 
             _ => {
                 response.set_status(StatusCode::NotFound);

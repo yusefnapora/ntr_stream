@@ -5,6 +5,7 @@ extern crate clap;
 extern crate bus;
 extern crate hyper;
 extern crate futures;
+extern crate byteorder;
 
 use clap::{Arg, App};
 use hyper::server::Http;
@@ -13,7 +14,9 @@ mod remote_play;
 mod server;
 
 use server::StreamingServer;
+use remote_play::packets::StreamingConfig;
 use remote_play::stream;
+use remote_play::packets::Screen;
 
 fn main() {
     let matches = App::new("ntr_stream")
@@ -42,14 +45,25 @@ fn main() {
     let host = matches.value_of("host").unwrap();
     let listen_port = matches.value_of("port").unwrap();
 
+    let config = StreamingConfig {
+        host: host.to_string(),
+        priority_factor: 1,
+        priority_screen: Screen::Top,
+        compression_quality: quality,
+        qos: 900
+    };
+
     println!("Host: {}, quality: {}", host, quality);
     println!("port: {}", listen_port);
 
+    stream::send_init_command(&config);
 
     let addr = format!("127.0.0.1:{}", listen_port);
     let addr = addr.parse().unwrap();
+
     let server = Http::new().bind(&addr, || Ok(
-        StreamingServer { image_readers: stream::remote_play_stream() }
+        StreamingServer { remote_play_stream: stream::RemotePlayStream::bind().expect("error starting remote play stream") }
     )).unwrap();
     server.run().unwrap();
+
 }
