@@ -21,8 +21,7 @@ pub struct StreamingServer {
 
 fn format_timestamp() -> String {
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let in_ms = ts.as_secs() * 1000 + ts.subsec_nanos() as u64 / 1_000_000;
-    format!("{:6}", in_ms as f64)
+    format!("{}.{:6}", ts.as_secs(), ts.subsec_nanos())
 }
 
 
